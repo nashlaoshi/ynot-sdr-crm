@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Y-Not SDR CRM</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#14213D" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #E7E1D6; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="notice" style="position:fixed;bottom:12px;right:12px;background:#14213D;color:#fff;font:12px/1.4 system-ui;padding:8px 12px;border-radius:8px;opacity:0.85;max-width:260px;">
+  Standalone copy — data is saved in this browser only, not shared with other reviewers.
+</div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ---------------------------------------------------------
+   TOKENS
+--------------------------------------------------------- */
+const C = {
+  bg: "#FAF7F2", card: "#FFFFFF", ink: "#1B2430", sub: "#5B6472",
+  navy: "#14213D", teal: "#0E9AA7", tealDeep: "#0B7A85",
+  amber: "#D97706", rose: "#B3475B", purple: "#6D5DD3",
+  border: "#E7E1D6", borderSoft: "#F0EBE1",
+};
+
+const TIER_META = {
+  1: { label: "Tier 1 — Dream", color: C.amber, touches: 15 },
+  2: { label: "Tier 2 — Strong Fit", color: C.teal, touches: 12 },
+  3: { label: "Tier 3 — Volume", color: C.sub, touches: 8 },
+};
+
+const CHANNEL_META = {
+  LinkedIn: { color: C.navy, glyph: "in" },
+  Email: { color: C.tealDeep, glyph: "✉" },
+  Phone: { color: C.amber, glyph: "📞" },
+  Video: { color: C.purple, glyph: "🎥" },
+};
+
+const CADENCES = {
+  1: [
+    { day: 1, channel: "LinkedIn", action: "Connection request, no pitch" },
+    { day: 1, channel: "Email", action: "Personalized opener" },
+    { day: 3, channel: "Email", action: "Value-add follow-up" },
+    { day: 5, channel: "LinkedIn", action: "Engage with content" },
+    { day: 7, channel: "Phone", action: "First call attempt" },
+    { day: 9, channel: "Email", action: "Pattern interrupt" },
+    { day: 11, channel: "LinkedIn", action: "DM if connected" },
+    { day: 13, channel: "Phone", action: "Second call attempt" },
+    { day: 15, channel: "Email", action: "Social proof" },
+    { day: 17, channel: "Video", action: "Personalized video" },
+    { day: 19, channel: "Phone", action: "Third call attempt" },
+    { day: 21, channel: "Email", action: "Breakup email" },
+    { day: 23, channel: "LinkedIn", action: "Multi-thread: 2nd persona" },
+    { day: 25, channel: "Phone", action: "Multi-thread: 3rd persona" },
+    { day: 27, channel: "Email", action: "Executive-level breakup" },
+  ],
+  2: [
+    { day: 1, channel: "LinkedIn", action: "Connection request, no pitch" },
+    { day: 1, channel: "Email", action: "Personalized opener" },
+    { day: 3, channel: "Email", action: "Value-add follow-up" },
+    { day: 5, channel: "LinkedIn", action: "Engage with content" },
+    { day: 7, channel: "Phone", action: "First call attempt" },
+    { day: 9, channel: "Email", action: "Pattern interrupt" },
+    { day: 11, channel: "LinkedIn", action: "DM if connected" },
+    { day: 13, channel: "Phone", action: "Second call attempt" },
+    { day: 15, channel: "Email", action: "Social proof" },
+    { day: 17, channel: "Video", action: "Personalized video" },
+    { day: 19, channel: "Phone", action: "Third call attempt" },
+    { day: 21, channel: "Email", action: "Breakup email" },
+  ],
+  3: [
+    { day: 1, channel: "LinkedIn", action: "Connection request, no pitch" },
+    { day: 1, channel: "Email", action: "Templated opener" },
+    { day: 4, channel: "Email", action: "Value-add follow-up" },
+    { day: 7, channel: "Phone", action: "Call attempt" },
+    { day: 10, channel: "LinkedIn", action: "Engage with content" },
+    { day: 13, channel: "Email", action: "Pattern interrupt" },
+    { day: 16, channel: "Phone", action: "Second call attempt" },
+    { day: 18, channel: "Email", action: "Breakup email" },
+  ],
+};
+
+const VERTICALS = [
+  "Hospitality & Travel", "Entertainment & Sports", "Tech & Enterprise SaaS",
+  "Food, Beverage & CPG", "Financial & Professional Services",
+  "Healthcare & Wellness", "Other / Adjacent",
+];
+
+const PERSONAS_A = ["CMO / VP Marketing", "VP / Director of Brand", "VP / Director of Employee Experience or People", "VP / Director of Events"];
+const PERSONAS_B = ["Procurement / Strategic Sourcing", "Director of Internal Communications", "Director of Field or Retail Marketing", "Chief People Officer"];
+
+const KPI_TARGETS = {
+  accountsResearched: { label: "New accounts researched", pt: 25, ft: 60 },
+  prospectsAdded: { label: "New prospects added to sequences", pt: 40, ft: 100 },
+  emailsSent: { label: "Personalized emails sent", pt: 75, ft: 200 },
+  linkedinTouches: { label: "LinkedIn touches", pt: 50, ft: 120 },
+  callsAttempted: { label: "Phone calls attempted", pt: 40, ft: 100 },
+  videosRecorded: { label: "Video messages recorded", pt: 5, ft: 15 },
+  meetingsBooked: { label: "Qualified meetings booked", pt: 2, ft: 5 },
+};
+
+/* ---------------------------------------------------------
+   STORAGE HELPERS (localStorage — per-browser, per-device)
+--------------------------------------------------------- */
+function loadCollection(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function saveCollection(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) { console.error(e); }
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function startOfWeek(d = new Date()) {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  date.setDate(diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+function fmtHrs(seconds) { return (seconds / 3600).toFixed(1) + "h"; }
+function fmtClock(seconds) {
+  const h = Math.floor(seconds / 3600).toString().padStart(2, "0");
+  const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, "0");
+  const s = Math.floor(seconds % 60).toString().padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+function qualifiedCount(m) {
+  return ["icpFit", "personaFit", "needAcknowledged", "confirmedCalendar"].filter((k) => m.criteria?.[k]).length;
+}
+
+/* ---------------------------------------------------------
+   SHARED UI PIECES
+--------------------------------------------------------- */
+function Icon({ glyph, size = 14, color }) {
+  return <span style={{ fontSize: size, lineHeight: 1, color, fontWeight: glyph === "in" ? 700 : 400 }}>{glyph}</span>;
+}
+function Pill({ color, children }) {
+  return (
+    <span className="text-xs font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+      style={{ background: color + "1A", color, border: `1px solid ${color}40` }}>
+      {children}
+    </span>
+  );
+}
+function Card({ children, style, className = "" }) {
+  return (
+    <div className={`rounded-xl p-5 ${className}`}
+      style={{ background: C.card, border: `1px solid ${C.border}`, boxShadow: "0 1px 2px rgba(20,33,61,0.04)", ...style }}>
+      {children}
+    </div>
+  );
+}
+function Button({ children, onClick, variant = "primary", size = "md", glyph, type = "button" }) {
+  const base = "inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-50";
+  const sizes = { sm: "text-xs px-2.5 py-1.5", md: "text-sm px-3.5 py-2" };
+  const styles = {
+    primary: { background: C.navy, color: "#fff" },
+    accent: { background: C.teal, color: "#fff" },
+    ghost: { background: "transparent", color: C.ink, border: `1px solid ${C.border}` },
+    danger: { background: "transparent", color: C.rose, border: `1px solid ${C.rose}40` },
+  };
+  return (
+    <button type={type} onClick={onClick} className={`${base} ${sizes[size]}`} style={styles[variant]}>
+      {glyph && <Icon glyph={glyph} size={13} />}
+      {children}
+    </button>
+  );
+}
+function Input(props) {
+  return <input {...props} className={"w-full text-sm rounded-lg px-3 py-2 outline-none " + (props.className || "")}
+    style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.ink, ...(props.style || {}) }} />;
+}
+function Select({ children, ...props }) {
+  return <select {...props} className="w-full text-sm rounded-lg px-3 py-2 outline-none"
+    style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.ink }}>{children}</select>;
+}
+function TextArea(props) {
+  return <textarea {...props} className="w-full text-sm rounded-lg px-3 py-2 outline-none"
+    style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.ink, minHeight: 70 }} />;
+}
+
+/* ---------------------------------------------------------
+   CADENCE TIMELINE
+--------------------------------------------------------- */
+function CadenceTimeline({ tier, touches, onToggle }) {
+  const plan = CADENCES[tier] || CADENCES[2];
+  const loggedDays = new Set(touches.map((t) => t.day));
+  return (
+    <div className="flex items-center gap-1 flex-wrap py-1">
+      {plan.map((step, i) => {
+        const meta = CHANNEL_META[step.channel];
+        const done = loggedDays.has(step.day);
+        return (
+          <button key={i} title={`Day ${step.day} · ${step.channel} · ${step.action}`}
+            onClick={() => onToggle(step)} className="relative flex flex-col items-center group" style={{ width: 30 }}>
+            <div className="w-6 h-6 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
+              style={{ background: done ? meta.color : "#fff", border: `2px solid ${meta.color}` }}>
+              <Icon glyph={meta.glyph} size={10} color={done ? "#fff" : meta.color} />
+            </div>
+            <span className="text-[9px] mt-0.5" style={{ color: C.sub }}>{step.day}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   DASHBOARD TAB
+--------------------------------------------------------- */
+function Dashboard({ accounts, prospects, touches, meetings }) {
+  const [role, setRole] = useState("ft");
+  const weekStart = startOfWeek();
+  const thisWeek = (arr, dateKey) => arr.filter((x) => new Date(x[dateKey]) >= weekStart);
+
+  const actuals = useMemo(() => {
+    const accW = thisWeek(accounts, "addedAt");
+    const proW = thisWeek(prospects, "addedAt");
+    const touW = thisWeek(touches, "date");
+    const meetW = thisWeek(meetings, "date").filter((m) => qualifiedCount(m) >= 3);
+    return {
+      accountsResearched: accW.length,
+      prospectsAdded: proW.length,
+      emailsSent: touW.filter((t) => t.channel === "Email").length,
+      linkedinTouches: touW.filter((t) => t.channel === "LinkedIn").length,
+      callsAttempted: touW.filter((t) => t.channel === "Phone").length,
+      videosRecorded: touW.filter((t) => t.channel === "Video").length,
+      meetingsBooked: meetW.length,
+    };
+  }, [accounts, prospects, touches, meetings]);
+
+  const tier1Accounts = accounts.filter((a) => a.tier === 1 && !a.disqualified).slice(0, 5);
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold" style={{ color: C.navy }}>This week's activity vs. target</h3>
+          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: C.border }}>
+            {["pt", "ft"].map((r) => (
+              <button key={r} onClick={() => setRole(r)} className="text-xs px-3 py-1.5"
+                style={{ background: role === r ? C.navy : "transparent", color: role === r ? "#fff" : C.sub }}>
+                {r === "pt" ? "Part-time" : "Full-time"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-3">
+          {Object.entries(KPI_TARGETS).map(([key, meta]) => {
+            const target = meta[role];
+            const val = actuals[key] || 0;
+            const pct = Math.min(100, (val / target) * 100);
+            return (
+              <div key={key}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span style={{ color: C.ink }}>{meta.label}</span>
+                  <span style={{ color: C.sub }}>{val} / {target}</span>
+                </div>
+                <div className="h-2 rounded-full" style={{ background: C.borderSoft }}>
+                  <div className="h-2 rounded-full" style={{ width: pct + "%", background: pct >= 100 ? C.teal : C.amber }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="font-semibold mb-3" style={{ color: C.navy }}>Tier 1 accounts in motion</h3>
+        {tier1Accounts.length === 0 && <p className="text-sm" style={{ color: C.sub }}>No Tier 1 accounts yet — add one from the Accounts tab.</p>}
+        <div className="space-y-2">
+          {tier1Accounts.map((a) => (
+            <div key={a.id} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0" style={{ borderColor: C.borderSoft }}>
+              <div>
+                <span className="font-medium" style={{ color: C.ink }}>{a.name}</span>
+                <span className="ml-2 text-xs" style={{ color: C.sub }}>{a.vertical}</span>
+              </div>
+              <span className="text-xs" style={{ color: C.amber }}>{a.trigger || "no trigger logged"}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   ACCOUNTS TAB
+--------------------------------------------------------- */
+function AccountsTab({ accounts, setAccounts, prospects }) {
+  const [query, setQuery] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", vertical: VERTICALS[0], tier: 2, trigger: "", notes: "" });
+  const dupe = form.name.trim() && accounts.some((a) => a.name.trim().toLowerCase() === form.name.trim().toLowerCase());
+  const filtered = accounts.filter((a) => a.name.toLowerCase().includes(query.toLowerCase()));
+
+  function addAccount() {
+    if (!form.name.trim() || dupe) return;
+    const next = [...accounts, { id: uid(), ...form, tier: Number(form.tier), disqualified: false, addedAt: new Date().toISOString() }];
+    setAccounts(next); saveCollection("accounts", next);
+    setForm({ name: "", vertical: VERTICALS[0], tier: 2, trigger: "", notes: "" });
+    setShowForm(false);
+  }
+  function toggleDisqualified(id) {
+    const next = accounts.map((a) => (a.id === id ? { ...a, disqualified: !a.disqualified } : a));
+    setAccounts(next); saveCollection("accounts", next);
+  }
+  function removeAccount(id) {
+    const next = accounts.filter((a) => a.id !== id);
+    setAccounts(next); saveCollection("accounts", next);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: C.sub, fontSize: 13 }}>🔍</span>
+          <Input placeholder="Search before you add — CRM hygiene rule #1" value={query} onChange={(e) => setQuery(e.target.value)} style={{ paddingLeft: 30 }} />
+        </div>
+        <Button glyph="+" onClick={() => setShowForm((s) => !s)}>New account</Button>
+      </div>
+
+      {showForm && (
+        <Card>
+          <div className="grid grid-cols-2 gap-3">
+            <Input placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })}>
+              {[1, 2, 3].map((t) => <option key={t} value={t}>{TIER_META[t].label}</option>)}
+            </Select>
+            <Select value={form.vertical} onChange={(e) => setForm({ ...form, vertical: e.target.value })}>
+              {VERTICALS.map((v) => <option key={v}>{v}</option>)}
+            </Select>
+            <Input placeholder="Trigger signal (e.g. new CMO hired, rebrand)" value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value })} />
+            <TextArea placeholder="Notes" className="col-span-2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </div>
+          {dupe && (
+            <div className="flex items-center gap-1.5 text-xs mt-2" style={{ color: C.rose }}>
+              <Icon glyph="⚠️" size={13} /> An account with this name already exists — check before adding a duplicate.
+            </div>
+          )}
+          <div className="flex gap-2 mt-3">
+            <Button variant="accent" onClick={addAccount}>Save account</Button>
+            <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
+
+      <div className="space-y-3">
+        {filtered.map((a) => {
+          const count = prospects.filter((p) => p.accountId === a.id).length;
+          return (
+            <Card key={a.id} style={{ opacity: a.disqualified ? 0.55 : 1 }}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Icon glyph="🏢" size={15} color={C.navy} />
+                    <span className="font-semibold" style={{ color: C.ink }}>{a.name}</span>
+                    <Pill color={TIER_META[a.tier].color}>{TIER_META[a.tier].label}</Pill>
+                    {a.disqualified && <Pill color={C.rose}>Disqualified</Pill>}
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: C.sub }}>{a.vertical} · {count} prospect{count === 1 ? "" : "s"}</p>
+                  {a.trigger && <p className="text-xs mt-1" style={{ color: C.amber }}>Trigger: {a.trigger}</p>}
+                  {a.notes && <p className="text-xs mt-1" style={{ color: C.sub }}>{a.notes}</p>}
+                </div>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="ghost" onClick={() => toggleDisqualified(a.id)}>
+                    {a.disqualified ? "Reinstate" : "Disqualify"}
+                  </Button>
+                  <Button size="sm" variant="danger" glyph="🗑" onClick={() => removeAccount(a.id)}>Delete</Button>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+        {filtered.length === 0 && <p className="text-sm text-center py-6" style={{ color: C.sub }}>No accounts match. Add one above.</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   PROSPECTS TAB
+--------------------------------------------------------- */
+function ProspectsTab({ accounts, prospects, setProspects, touches, setTouches }) {
+  const [showForm, setShowForm] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [form, setForm] = useState({ accountId: accounts[0]?.id || "", name: "", title: "", persona: PERSONAS_A[0], linkedin: "", trigger: "" });
+
+  useEffect(() => {
+    if (!form.accountId && accounts[0]) setForm((f) => ({ ...f, accountId: accounts[0].id }));
+  }, [accounts]);
+
+  function addProspect() {
+    if (!form.name.trim() || !form.accountId) return;
+    const next = [...prospects, { id: uid(), ...form, addedAt: new Date().toISOString() }];
+    setProspects(next); saveCollection("prospects", next);
+    setForm({ ...form, name: "", title: "", linkedin: "", trigger: "" });
+    setShowForm(false);
+  }
+  function removeProspect(id) {
+    const next = prospects.filter((p) => p.id !== id);
+    setProspects(next); saveCollection("prospects", next);
+    const nextT = touches.filter((t) => t.prospectId !== id);
+    setTouches(nextT); saveCollection("touches", nextT);
+  }
+  function toggleTouch(prospectId, step) {
+    const existing = touches.find((t) => t.prospectId === prospectId && t.day === step.day && t.channel === step.channel);
+    let next;
+    if (existing) next = touches.filter((t) => t.id !== existing.id);
+    else next = [...touches, { id: uid(), prospectId, day: step.day, channel: step.channel, action: step.action, date: new Date().toISOString() }];
+    setTouches(next); saveCollection("touches", next);
+  }
+
+  if (accounts.length === 0) {
+    return <p className="text-sm text-center py-8" style={{ color: C.sub }}>Add an account first — prospects belong to an account.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <Button glyph="+" onClick={() => setShowForm((s) => !s)}>New prospect</Button>
+
+      {showForm && (
+        <Card>
+          <div className="grid grid-cols-2 gap-3">
+            <Select value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Select>
+            <Input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <Select value={form.persona} onChange={(e) => setForm({ ...form, persona: e.target.value })}>
+              <optgroup label="Tier A">{PERSONAS_A.map((p) => <option key={p}>{p}</option>)}</optgroup>
+              <optgroup label="Tier B">{PERSONAS_B.map((p) => <option key={p}>{p}</option>)}</optgroup>
+            </Select>
+            <Input placeholder="LinkedIn URL" value={form.linkedin} onChange={(e) => setForm({ ...form, linkedin: e.target.value })} />
+            <Input placeholder="Trigger" value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value })} />
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Button variant="accent" onClick={addProspect}>Save prospect</Button>
+            <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
+
+      <div className="space-y-3">
+        {prospects.map((p) => {
+          const account = accounts.find((a) => a.id === p.accountId);
+          if (!account) return null;
+          const pTouches = touches.filter((t) => t.prospectId === p.id);
+          const isOpen = expanded === p.id;
+          return (
+            <Card key={p.id}>
+              <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpanded(isOpen ? null : p.id)}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Icon glyph="👥" size={14} color={C.navy} />
+                    <span className="font-semibold" style={{ color: C.ink }}>{p.name}</span>
+                    <span className="text-xs" style={{ color: C.sub }}>{p.title}</span>
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: C.sub }}>{account.name} · {p.persona}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{ color: C.sub }}>{pTouches.length}/{TIER_META[account.tier].touches} touches</span>
+                  <Icon glyph={isOpen ? "▴" : "▾"} size={14} color={C.sub} />
+                </div>
+              </div>
+              {isOpen && (
+                <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                  <p className="text-xs mb-1" style={{ color: C.sub }}>Tap a step to log or unlog that touch — {TIER_META[account.tier].label} cadence</p>
+                  <CadenceTimeline tier={account.tier} touches={pTouches} onToggle={(step) => toggleTouch(p.id, step)} />
+                  <div className="flex justify-end mt-2">
+                    <Button size="sm" variant="danger" glyph="🗑" onClick={() => removeProspect(p.id)}>Delete prospect</Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+        {prospects.length === 0 && <p className="text-sm text-center py-6" style={{ color: C.sub }}>No prospects yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   MEETINGS TAB
+--------------------------------------------------------- */
+function MeetingsTab({ accounts, prospects, meetings, setMeetings }) {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ prospectId: prospects[0]?.id || "", notes: "" });
+  const criteriaLabels = {
+    icpFit: "Company matches ICP firmographics",
+    personaFit: "Prospect holds a Tier A/B persona or owns the use case",
+    needAcknowledged: "Prospect acknowledged a real or potential need",
+    confirmedCalendar: "Confirmed date, time, and attendees on the calendar",
+  };
+
+  function addMeeting() {
+    if (!form.prospectId) return;
+    const next = [...meetings, { id: uid(), prospectId: form.prospectId, notes: form.notes, date: new Date().toISOString(), criteria: { icpFit: false, personaFit: false, needAcknowledged: false, confirmedCalendar: false }, briefSent: false }];
+    setMeetings(next); saveCollection("meetings", next);
+    setForm({ prospectId: prospects[0]?.id || "", notes: "" });
+    setShowForm(false);
+  }
+  function toggleCriteria(id, key) {
+    const next = meetings.map((m) => (m.id === id ? { ...m, criteria: { ...m.criteria, [key]: !m.criteria[key] } } : m));
+    setMeetings(next); saveCollection("meetings", next);
+  }
+  function toggleBrief(id) {
+    const next = meetings.map((m) => (m.id === id ? { ...m, briefSent: !m.briefSent } : m));
+    setMeetings(next); saveCollection("meetings", next);
+  }
+  function removeMeeting(id) {
+    const next = meetings.filter((m) => m.id !== id);
+    setMeetings(next); saveCollection("meetings", next);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Button glyph="+" onClick={() => setShowForm((s) => !s)}>Log a booked meeting</Button>
+      {showForm && (
+        <Card>
+          <div className="grid grid-cols-1 gap-3">
+            <Select value={form.prospectId} onChange={(e) => setForm({ ...form, prospectId: e.target.value })}>
+              {prospects.map((p) => <option key={p.id} value={p.id}>{p.name} — {accounts.find((a) => a.id === p.accountId)?.name}</option>)}
+            </Select>
+            <TextArea placeholder="Handoff brief: trigger, use case fit, notable context" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Button variant="accent" onClick={addMeeting}>Save meeting</Button>
+            <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
+      <div className="space-y-3">
+        {meetings.map((m) => {
+          const p = prospects.find((x) => x.id === m.prospectId);
+          const qCount = qualifiedCount(m);
+          const qualified = qCount >= 3;
+          return (
+            <Card key={m.id}>
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <span className="font-semibold" style={{ color: C.ink }}>{p?.name || "Unknown prospect"}</span>
+                  <Pill color={qualified ? C.teal : C.sub}>{qualified ? "Qualified" : "Discovery call"} ({qCount}/4)</Pill>
+                </div>
+                <Button size="sm" variant="danger" glyph="🗑" onClick={() => removeMeeting(m.id)}>Delete</Button>
+              </div>
+              <div className="space-y-1.5 mb-2">
+                {Object.entries(criteriaLabels).map(([key, label]) => (
+                  <button key={key} onClick={() => toggleCriteria(m.id, key)} className="flex items-center gap-2 text-xs w-full text-left">
+                    <Icon glyph={m.criteria[key] ? "✓" : "○"} size={14} color={m.criteria[key] ? C.teal : C.border} />
+                    <span style={{ color: C.ink }}>{label}</span>
+                  </button>
+                ))}
+              </div>
+              {m.notes && <p className="text-xs mb-2" style={{ color: C.sub }}>{m.notes}</p>}
+              <button onClick={() => toggleBrief(m.id)} className="flex items-center gap-2 text-xs">
+                <Icon glyph={m.briefSent ? "✓" : "○"} size={14} color={m.briefSent ? C.teal : C.border} />
+                <span style={{ color: C.ink }}>Handoff brief sent to Nikki</span>
+              </button>
+            </Card>
+          );
+        })}
+        {meetings.length === 0 && <p className="text-sm text-center py-6" style={{ color: C.sub }}>No meetings logged yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   TIME CLOCK TAB
+--------------------------------------------------------- */
+function TimeClock({ timeEntries, setTimeEntries }) {
+  const [person, setPerson] = useState("");
+  const [running, setRunning] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [manualHours, setManualHours] = useState("");
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - running.startTs) / 1000)), 1000);
+    } else {
+      clearInterval(intervalRef.current);
+      setElapsed(0);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [running]);
+
+  function start() {
+    if (!person.trim()) return;
+    setRunning({ person: person.trim(), startTs: Date.now() });
+  }
+  function stop() {
+    if (!running) return;
+    const durationSeconds = Math.floor((Date.now() - running.startTs) / 1000);
+    const next = [...timeEntries, { id: uid(), person: running.person, date: new Date().toISOString(), durationSeconds }];
+    setTimeEntries(next); saveCollection("time_entries", next);
+    setRunning(null);
+  }
+  function addManual() {
+    const hrs = parseFloat(manualHours);
+    if (!person.trim() || !hrs) return;
+    const next = [...timeEntries, { id: uid(), person: person.trim(), date: new Date().toISOString(), durationSeconds: Math.round(hrs * 3600) }];
+    setTimeEntries(next); saveCollection("time_entries", next);
+    setManualHours("");
+  }
+  function removeEntry(id) {
+    const next = timeEntries.filter((t) => t.id !== id);
+    setTimeEntries(next); saveCollection("time_entries", next);
+  }
+
+  const weekStart = startOfWeek();
+  const weekEntries = timeEntries.filter((t) => new Date(t.date) >= weekStart);
+  const byPerson = {};
+  weekEntries.forEach((t) => { byPerson[t.person] = (byPerson[t.person] || 0) + t.durationSeconds; });
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-center gap-3 mb-3">
+          <Icon glyph="⏱" size={18} color={C.navy} />
+          <h3 className="font-semibold" style={{ color: C.navy }}>Work clock</h3>
+        </div>
+        <Input placeholder="Your name" value={person} onChange={(e) => setPerson(e.target.value)} disabled={!!running} className="mb-3" />
+        <div className="flex items-center gap-3">
+          <span className="text-3xl font-mono tabular-nums" style={{ color: running ? C.teal : C.sub }}>{fmtClock(elapsed)}</span>
+          {!running ? (
+            <Button variant="accent" glyph="▶" onClick={start}>Start</Button>
+          ) : (
+            <Button variant="danger" glyph="⏸" onClick={stop}>Stop &amp; log</Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+          <Input placeholder="Manual entry: hours" value={manualHours} onChange={(e) => setManualHours(e.target.value)} style={{ maxWidth: 140 }} />
+          <Button variant="ghost" onClick={addManual}>Add manual entry</Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="font-semibold mb-3" style={{ color: C.navy }}>This week, by person</h3>
+        {Object.keys(byPerson).length === 0 && <p className="text-sm" style={{ color: C.sub }}>No time logged yet this week.</p>}
+        <div className="space-y-2">
+          {Object.entries(byPerson).map(([name, secs]) => (
+            <div key={name} className="flex justify-between text-sm">
+              <span style={{ color: C.ink }}>{name}</span>
+              <span style={{ color: C.teal }} className="font-medium">{fmtHrs(secs)}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="font-semibold mb-3" style={{ color: C.navy }}>Recent entries</h3>
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {[...timeEntries].reverse().slice(0, 30).map((t) => (
+            <div key={t.id} className="flex items-center justify-between text-xs py-1 border-b last:border-0" style={{ borderColor: C.borderSoft }}>
+              <span style={{ color: C.ink }}>{t.person}</span>
+              <span style={{ color: C.sub }}>{new Date(t.date).toLocaleDateString()} · {fmtHrs(t.durationSeconds)}</span>
+              <button onClick={() => removeEntry(t.id)}><Icon glyph="✕" size={12} color={C.sub} /></button>
+            </div>
+          ))}
+          {timeEntries.length === 0 && <p className="text-sm" style={{ color: C.sub }}>Nothing logged yet.</p>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   APP
+--------------------------------------------------------- */
+function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [accounts, setAccounts] = useState(() => loadCollection("accounts"));
+  const [prospects, setProspects] = useState(() => loadCollection("prospects"));
+  const [touches, setTouches] = useState(() => loadCollection("touches"));
+  const [meetings, setMeetings] = useState(() => loadCollection("meetings"));
+  const [timeEntries, setTimeEntries] = useState(() => loadCollection("time_entries"));
+
+  const tabs = [
+    { id: "dashboard", label: "Dashboard", glyph: "🎯" },
+    { id: "accounts", label: "Accounts", glyph: "🏢" },
+    { id: "prospects", label: "Prospects", glyph: "👥" },
+    { id: "meetings", label: "Meetings", glyph: "✓" },
+    { id: "clock", label: "Time clock", glyph: "⏱" },
+  ];
+
+  return (
+    <div className="min-h-screen" style={{ background: C.bg, fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <header className="mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md flex items-center justify-center font-bold text-sm" style={{ background: C.teal, color: "#fff" }}>Y</div>
+            <div>
+              <h1 className="text-lg font-bold leading-tight" style={{ color: C.navy, fontFamily: "Georgia, 'Iowan Old Style', serif" }}>Y-Not SDR CRM</h1>
+              <p className="text-xs" style={{ color: C.sub }}>Built from the SDR Playbook · v1 — lightweight, expandable</p>
+            </div>
+          </div>
+        </header>
+
+        <nav className="flex gap-1 mb-5 p-1 rounded-xl" style={{ background: C.borderSoft }}>
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg transition-colors"
+              style={{ background: tab === t.id ? C.card : "transparent", color: tab === t.id ? C.navy : C.sub, boxShadow: tab === t.id ? "0 1px 2px rgba(20,33,61,0.08)" : "none" }}>
+              <Icon glyph={t.glyph} size={13} />
+              <span className="hidden sm:inline">{t.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {tab === "dashboard" && <Dashboard accounts={accounts} prospects={prospects} touches={touches} meetings={meetings} />}
+        {tab === "accounts" && <AccountsTab accounts={accounts} setAccounts={setAccounts} prospects={prospects} />}
+        {tab === "prospects" && <ProspectsTab accounts={accounts} prospects={prospects} setProspects={setProspects} touches={touches} setTouches={setTouches} />}
+        {tab === "meetings" && <MeetingsTab accounts={accounts} prospects={prospects} meetings={meetings} setMeetings={setMeetings} />}
+        {tab === "clock" && <TimeClock timeEntries={timeEntries} setTimeEntries={setTimeEntries} />}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
