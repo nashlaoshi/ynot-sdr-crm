@@ -1,4 +1,4 @@
-const CACHE_NAME = "ynot-sdr-crm-v5";
+const CACHE_NAME = "ynot-sdr-crm-v6";
 const CORE_ASSETS = [
   "./index.html",
   "./manifest.json",
